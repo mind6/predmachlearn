@@ -1,0 +1,69 @@
+---
+title: "Weight Lifting Exercise Prediction"
+author: "Kirby Zhang"
+date: "Monday, October 20, 2014"
+output: html_document
+---
+#Abstract
+[Weight lifting data](http://groupware.les.inf.puc-rio.br/har) collected by Ugulino, Velloso, and Fuks is used to form a prediction model. The model classifies one of five barbell lifting methods based on accelerometer and gyro data recorded on the user. Using manual feature selection and cross validation within and between different modeling methods, a high degree of prediction accuracy is achieved.
+
+
+#Exploratory Analysis
+We will go over the steps which were taken to preprocess the dataset and analyze its features (the data was obtained from [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)).
+
+##Tidy Data
+```{r,results='hide',echo=TRUE,cache=FALSE,warning=FALSE,message=FALSE}
+library(knitr)
+library(gbm)
+library(caret)
+library(lubridate)
+library(plyr)
+library(dplyr)
+library(doParallel)
+
+opts_chunk$set(warning=FALSE,message=FALSE)
+```
+
+```{r,cache=TRUE}
+
+setClass("quoted.numeric")
+setAs("character", "quoted.numeric", function(from) as.numeric(gsub('"','',from)))
+df <- read.csv("pml-training.csv",colClasses=c(
+  "character",
+  "factor",
+  rep("character", 4),
+  "integer",
+  rep("quoted.numeric", 159-8 + 1),
+  "factor"
+))
+```
+The dataset consisted of `r dim(df)[1]` observations with one outcome variable and 160 features. We created a "quoted.numeric" class to help us strip away quotation marks surrounding numeric values. A summary of the dataframe showed that columns 2 and 160 are appropriate as factor variables:
+```{r}
+summary(df[,c(2,160)])
+```
+##Feature Selection
+Next we took a closer look at the 160 features. We start by looking at the "testing" dataset we received. We reasoned that features that are uninteresting in this small 20-element dataset cannot be useful predictor variables. 
+```{r}
+df_submit <- read.csv("pml-testing.csv")
+dmy_hm(df$cvtd_timestamp) -> df$time
+dmy_hm(df_submit$cvtd_timestamp) -> df_submit$time
+select(df_submit, user_name, time, new_window, num_window) %>% arrange(user_name) 
+```
+We were able to eliminate `new_window` (no variation) as well as the variable `X` (not present in the testing data).
+
+###Timestamp and Window Data
+Next we are interested in looking at the timestamp fields as well as the `num_window` variable.
+```{r}
+qplot(df$time, df$num_window, color=df$classe, 
+      main="time appears to be an experiment artifact")
+```
+
+
+###Predictor Variables
+
+###Principal Components Analysis
+
+#Modeling with Cross Validation
+##Training and Testing Sets
+
+#Results

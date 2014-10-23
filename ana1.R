@@ -47,7 +47,7 @@ apply(is.na(df[,bad_cols]), 2, sum)/nrow(df)
 # for curiosity, we look at the correlation of the excluded columns, seeing they're minimal or 
 # unreliable
 cor(df[,bad_cols], as.numeric(df[,"classe"]), use="pairwise.complete.obs")
-plot(df[,"stddev_roll_belt"], df[,"classe"])
+qplot(df[,"stddev_roll_belt"], df[,"classe"])
 
 # use 80% for training set, 20% for testing set. train() will cross-validate
 # within the training set. Must set.seed() immediately before calling createDataPartition()
@@ -69,9 +69,9 @@ M <- cor(training[,sensor_cols])
 diag(M) <- 0
 which(abs(M) > 0.9, arr.ind=TRUE)
 
-plot(training[,sensor_cols[1:8]], col=typecolor)
+plot(training[,sensor_cols[c(1,4,9,10)]], col=typecolor)
 
-prcomp(training[,sensor_cols[c(53,54)]]) -> pcomp
+prcomp(training[,c(53,54)]) -> pcomp
 plot(pcomp$x[,c(1,2)], col=typecolor)
 
 # now normalize the covariates

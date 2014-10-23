@@ -38,32 +38,68 @@ df <- read.csv("pml-training.csv",colClasses=c(
 ))
 ```
 The dataset consisted of `r dim(df)[1]` observations with one outcome variable and 160 features. We created a "quoted.numeric" class to help us strip away quotation marks surrounding numeric values. A summary of the dataframe showed that columns 2 and 160 are appropriate as factor variables:
-```{r}
+```{r,cache=TRUE}
 summary(df[,c(2,160)])
 ```
 ##Feature Selection
 Next we took a closer look at the 160 features. We start by looking at the "testing" dataset we received. We reasoned that features that are uninteresting in this small 20-element dataset cannot be useful predictor variables. 
-```{r}
+```{r,cache=TRUE}
 df_submit <- read.csv("pml-testing.csv")
 dmy_hm(df$cvtd_timestamp) -> df$time
 dmy_hm(df_submit$cvtd_timestamp) -> df_submit$time
-select(df_submit, user_name, time, new_window, num_window) %>% arrange(user_name) 
+select(df_submit, X, user_name, time, new_window, num_window) %>% arrange(user_name) 
 ```
-We were able to eliminate `new_window` (no variation) as well as the variable `X` (not present in the testing data).
+
+We were able to eliminate `new_window` (no variation) as well as the variable `X` (a simple row count variable).
 
 ###Timestamp and Window Data
 Next we are interested in looking at the timestamp fields as well as the `num_window` variable.
-```{r}
+```{r,fig.height=3}
 qplot(df$time, df$num_window, color=df$classe, 
       main="time appears to be an experiment artifact")
+qplot(df$num_window, fill=df$classe, main="num_window appears distributed across classes")
+qplot(df$num_window, fill=df$user_name, main="num_window appears to be an artifact\n associated with individual users")
+qplot(num_window, classe, color=user_name, data=df, main="num_window appears related to the combination\nof user_name and activity classe")
+```
+
+Our first find was that the timestamp fields correspond to when the researchers conducted the weight lifting experiments. They should not be used in prediction. On the other hand, we found the `num_window` feature to be interesting. Even though the variable seems to be a data collection artifact and not likely to be a result of user activity, in the last plot above its value seems to be related to the classe on a per-user_name basis. We will therefore explore models both with and without this feature. 
+
+###Predictor Variables
+Next, we looked at the remaining columns corresponding acceleration and gyro data taken at different body positions. Without more domain specific knowledge (in the weigh lifting exercise domain), we chose to focus on eliminating inconsistent or low quality data fields. We found them by isolating the large number fields which contained NA's in the testing dataset. 
+
+We isolated columns which contained purely NA in the testing set.
+```{r}
+bad_cols <- which(apply(is.na(df_submit), 2, sum)/nrow(df_submit) == 1)
+```
+
+We found `r length(bad_cols)` columns we identified as unusable due to high sparsity of data (100% in the testing data set), and we confirmed their unusability by finding that all of these same columns have greater than 96% missing data in the training dataset.
+```{r,fig.keep='none'}
+c(num_bad_in_testing=length(bad_cols),
+     num_bad_in_training=sum(apply(is.na(df[,bad_cols]), 2, sum)/nrow(df) > 0.96))
+
+#The following plot confirms the few data points which are valid do not strongly predict
+#the "classe". This plot was omitted from the output for brevity.
+qplot(df[,bad_cols[1]], df[,"classe"])
 ```
 
 
-###Predictor Variables
-
-###Principal Components Analysis
-
 #Modeling with Cross Validation
-##Training and Testing Sets
+Now that we have identified a solid set of features, we're ready to begin modeling.
 
+##Training and Testing Sets
+```{r,cache=TRUE}
+set.seed(1234)
+inTrain <- createDataPartition(y=df$classe, p=0.80,list=FALSE)
+training <- df[inTrain, -bad_cols]
+# testing set will be used ONE TIME after model selection and parameter
+# tuning are completed.
+testing <- df[-inTrain, -bad_cols]
+
+#the sensor columns
+sensor_cols <- c(8:59)
+```
+
+We used an 80% and 20% split for training and testing sets. The testing set we refer to here was split off from the training data provided. *It will be set aside and used one time to predict our out-of-sample data rate.* We used a fixed seed in order to avoid accidentally digging into the testing set when the partition is re-created.
+
+##Principal Components Analysis
 #Results

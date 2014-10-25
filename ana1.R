@@ -71,7 +71,10 @@ which(abs(M) > 0.9, arr.ind=TRUE)
 
 plot(training[,sensor_cols[c(1,4,9,10)]], col=typecolor)
 
-prcomp(training[,c(53,54)]) -> pcomp
+prepro_obj <- preProcess(training[,sensor_cols], method=c("center","scale"))
+processed <- predict(prepro_obj, training[,sensor_cols])
+plot(prcomp(processed)$sd)
+prcomp(training[,sensor_cols[c(1,4)]]) -> pcomp
 plot(pcomp$x[,c(1,2)], col=typecolor)
 
 # now normalize the covariates
@@ -180,7 +183,7 @@ models <- rbind(models, list(preprocess="pca", includes_user_name=F,
 
 ##############################################################################
 tail(models[,"model"]$results,1)[c("Accuracy","AccuracySD")]
-sapply(models[,"model"], function(x) tail(x$results,1))
+sapply(models[,"model"], function(x) x[["results"]])
 
 stopCluster(cl)
 
@@ -195,3 +198,9 @@ table(testing[,"classe"], pred2)
 sum(diag(pred2))
 
 
+boxplot(list(
+  c(1,2,3),
+  c(2,2.5,3)
+  ),
+  names=c("random forrest", "gbm"),
+  horizontal=TRUE)

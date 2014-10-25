@@ -79,7 +79,7 @@ c(num_bad_in_testing=length(bad_cols),
 
 #The following plot confirms the few data points which are valid do not strongly predict
 #the "classe". This plot was omitted from the output for brevity.
-qplot(df[,bad_cols[1]], df[,"classe"])
+#qplot(df[,bad_cols[1]], df[,"classe"])
 ```
 
 
@@ -99,7 +99,136 @@ testing <- df[-inTrain, -bad_cols]
 sensor_cols <- c(8:59)
 ```
 
-We used an 80% and 20% split for training and testing sets. The testing set we refer to here was split off from the training data provided. *It will be set aside and used one time to predict our out-of-sample data rate.* We used a fixed seed in order to avoid accidentally digging into the testing set when the partition is re-created.
+We used an 80% and 20% split for training and testing sets. The testing set we refer to here was split off from the training data provided. *It will be set aside and used one time to predict our out-of-sample data rate.* We used a fixed seed in order to avoid accidentally training with the testing set when the partition is randomly re-created.
 
 ##Principal Components Analysis
+```{r}
+prepro_obj <- preProcess(training[,sensor_cols], method=c("center","scale"))
+processed <- predict(prepro_obj, training[,sensor_cols])
+plot(prcomp(processed)$sd)
+```
+
+After we scaled and centered the data, we looked at the plot of the standard deviations of its principal components. A lack of sharp drop off in variability suggests performing PCA may be of little use to our models. We will run an actual model with PCA to see if this hunch is correct.
+
+##The Models
+We take advantage of the paralles package to use multiple cores to speed up modeling. Through experimentation, we found using one less than the number of detected cores improves system responsiveness during the modeling process.
+
+```{r}
+restartClusters <- function() {
+  if (exists("cl",mode="list")) try(stopCluster(cl))
+  # leaving one core out improves system responsiveness
+  cl <<- makeCluster(detectCores()-1)
+  registerDoParallel(cl)
+}
+
+```
+
+### Generalized Boosted Models
+The first set of models we run are Generalized Boosted Models. We run GBM under different options such as bootstrap versus 10-fold cross-validation, no preprocessing vs center and scaling vs Principal Component Analysis.
+
+```{r,cache=TRUE,results='hide'}
+restartClusters()
+proc1 <- system.time(mod1 <- train(training[,sensor_cols], training[,"classe"], 
+                                      method="gbm"))
+```
+
+```{r,cache=TRUE,results='hide'}
+cvControl <- trainControl(## 10-fold CV
+  method = "repeatedcv",
+  number = 10,
+  ## repeated ten times
+  repeats = 1)
+restartClusters()
+proc2 <- system.time(mod2 <- train(training[,sensor_cols], training[,"classe"], 
+                                      method="gbm", trControl = cvControl))
+```
+
+```{r,cache=TRUE,results='hide'}
+restartClusters()
+proc3 <- system.time(mod3 <- train(training[,c(2,sensor_cols)], training[,"classe"], 
+                                      method="gbm", trControl = cvControl))
+```
+
+```{r,cache=TRUE,results='hide'}
+restartClusters()
+proc4 <- system.time(mod4 <- train(training[,sensor_cols], training[,"classe"], 
+                                      preProcess=c("center","scale"),
+                                      method="gbm", trControl = cvControl))
+```
+
+```{r,cache=TRUE,results='hide'}
+restartClusters()
+proc5 <- system.time(mod5 <- train(training[,sensor_cols], training[,"classe"], 
+                                      preProcess=c("pca"),
+                                      method="gbm", trControl = cvControl))
+```
+
+### Random Forrests
+Next we run Random Forrest models comparing boostrap vs. 10-fold cross validation, as well as introducing user\_name and and num\_window variables as predictors.
+
+```{r,cache=TRUE,results='hide'}
+restartClusters()
+proc6 <- system.time(mod6 <- train(training[,sensor_cols], training[,"classe"], 
+                                      method="rf"))
+```
+
+```{r,cache=TRUE,results='hide'}
+restartClusters()
+proc7 <- system.time(mod7 <- train(training[,sensor_cols], training[,"classe"], 
+                                      method="rf", trControl = cvControl))
+```
+```{r,cache=TRUE,results='hide'}
+restartClusters()
+proc8 <- system.time(mod8 <- train(training[,c(2,sensor_cols)], training[,"classe"], 
+                                      method="rf"))
+```
+```{r,cache=TRUE,results='hide'}
+restartClusters()
+proc9 <- system.time(mod9 <- train(training[,c(2,7,sensor_cols)], training[,"classe"], 
+                                      method="rf"))
+```
+```{r}
+models <- NULL
+
+models <- rbind(models, list(method="gbm", CV="bootstrap", 
+                             time_used=proc1["elapsed"], 
+                             notes="", model=mod1))
+models <- rbind(models, list(method="gbm", CV="10-fold", 
+                             time_used=proc2["elapsed"], 
+                             notes="", model=mod2))
+models <- rbind(models, list(method="gbm", CV="10-fold", 
+                             time_used=proc3["elapsed"], 
+                             notes="user_name", model=mod3))
+models <- rbind(models, list(method="gbm", CV="10-fold", 
+                             time_used=proc4["elapsed"], 
+                             notes="center,scale", model=mod3))
+models <- rbind(models, list(method="gbm", CV="10-fold", 
+                             time_used=proc5["elapsed"], 
+                             notes="PCA", model=mod3))
+
+models <- rbind(models, list(method="rf", CV="bootstrap", 
+                             time_used=proc6["elapsed"], 
+                             notes="", model=mod6))
+models <- rbind(models, list(method="rf", CV="10-fold", 
+                             time_used=proc7["elapsed"], 
+                             notes="", model=mod7))
+models <- rbind(models, list(method="rf", CV="bootstrap", 
+                             time_used=proc8["elapsed"], 
+                             notes="user_name", model=mod8))
+models <- rbind(models, list(method="rf", CV="bootstrap", 
+                             time_used=proc9["elapsed"], 
+                             notes="user_name,num_window", model=mod9))
+
+res <- t(sapply(models[1:5,"model"], function(x) tail(x[["results"]],1)[c("Accuracy","AccuracySD")]))
+
+res <- rbind(res, t(sapply(models[6:9,"model"], function(x) {
+with(x$model, filter(results, mtry==bestTune[1,1])[c("Accuracy","AccuracySD")])  
+})))
+
+cbind(models[,-ncol(models)], res)
+```
 #Results
+
+Boxplots are drawn where the whiskers correspond to the standard deviation of the accuracy across different cross-validation tests within each model. 
+
+

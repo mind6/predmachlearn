@@ -196,7 +196,7 @@ system.time(model2 <- train(processed, training[,"classe"]))
 pred2 <- predict(model2, predict(prepro_obj, testing[,sensor_cols]))
 table(testing[,"classe"], pred2)
 sum(diag(pred2))
-
+df_submit[,-bad_cols][,c(2,7,sensor_cols)]
 
 boxplot(list(
   c(1,2,3),

@@ -2,7 +2,7 @@
 title: "Weight Lifting Exercise Prediction"
 author: "Kirby Zhang"
 date: "Monday, October 20, 2014"
-output: html_document
+output: pdf_document
 ---
 #Abstract
 [Weight lifting data](http://groupware.les.inf.puc-rio.br/har) collected by Ugulino, Velloso, and Fuks is used to form a prediction model. The model classifies one of five barbell lifting methods based on accelerometer and gyro data recorded on the user. Using manual feature selection and cross validation within and between different modeling methods, a high degree of prediction accuracy is achieved.
@@ -111,7 +111,7 @@ plot(prcomp(processed)$sd)
 After we scaled and centered the data, we looked at the plot of the standard deviations of its principal components. A lack of sharp drop off in variability suggests performing PCA may be of little use to our models. We will run an actual model with PCA to see if this hunch is correct.
 
 ##The Models
-We take advantage of the paralles package to use multiple cores to speed up modeling. Through experimentation, we found using one less than the number of detected cores improves system responsiveness during the modeling process.
+We take advantage of the paralles package to use multiple cores to speed up modeling. Through experimentation, we found using one less than the number of detected cores improves system responsiveness during the modeling process. It was necessary to restart the clusters prior to each modeling run in order to reclaim unused memory.
 
 ```{r}
 restartClusters <- function() {
@@ -187,6 +187,11 @@ restartClusters()
 proc9 <- system.time(mod9 <- train(training[,c(2,7,sensor_cols)], training[,"classe"], 
                                       method="rf"))
 ```
+```{r,cache=TRUE,results='hide'}
+restartClusters()
+proc10 <- system.time(mod10 <- train(training[,c(2,7,sensor_cols)], training[,"classe"], 
+                                      method="rf", trControl = cvControl))
+```
 ```{r}
 models <- NULL
 
@@ -201,10 +206,10 @@ models <- rbind(models, list(method="gbm", CV="10-fold",
                              notes="user_name", model=mod3))
 models <- rbind(models, list(method="gbm", CV="10-fold", 
                              time_used=proc4["elapsed"], 
-                             notes="center,scale", model=mod3))
+                             notes="center,scale", model=mod4))
 models <- rbind(models, list(method="gbm", CV="10-fold", 
                              time_used=proc5["elapsed"], 
-                             notes="PCA", model=mod3))
+                             notes="PCA", model=mod5))
 
 models <- rbind(models, list(method="rf", CV="bootstrap", 
                              time_used=proc6["elapsed"], 
@@ -218,17 +223,59 @@ models <- rbind(models, list(method="rf", CV="bootstrap",
 models <- rbind(models, list(method="rf", CV="bootstrap", 
                              time_used=proc9["elapsed"], 
                              notes="user_name,num_window", model=mod9))
+models <- rbind(models, list(method="rf", CV="10-fold", 
+                             time_used=proc10["elapsed"], 
+                             notes="user_name,num_window", model=mod10))
 
 res <- t(sapply(models[1:5,"model"], function(x) tail(x[["results"]],1)[c("Accuracy","AccuracySD")]))
 
-res <- rbind(res, t(sapply(models[6:9,"model"], function(x) {
-with(x$model, filter(results, mtry==bestTune[1,1])[c("Accuracy","AccuracySD")])  
+res <- rbind(res, t(sapply(models[6:10,"model"], function(x) {
+with(x, filter(results, mtry==bestTune[1,1])[c("Accuracy","AccuracySD")])  
 })))
+```
 
-cbind(models[,-ncol(models)], res)
+```{r,results='asis'}
+library(xtable)
+tab <- xtable(cbind(models[,-ncol(models)], res), digits=4)
+print(tab, type="html", html.table.attributes="border=0 cellpadding=3")
 ```
 #Results
 
-Boxplots are drawn where the whiskers correspond to the standard deviation of the accuracy across different cross-validation tests within each model. 
+The previous table shows our progression toward ever better models. First we started with GBM and obtained accuracies of about 96%. We found that 10-fold cross-validation offered a small improvement over bootstrapping, but increased the variance. Adding in the user\_name feature or centering and scaling the predictor variables made little impact on the accuracy. On the other hand, Principal Component Analysis greatly reduced the accuracy down to 82%. This result reflected our earlier analysis that the PCA vectors were not dropping sufficiently in their standard deviations.
 
+Our best results came from using Random Forest algorithms, shooting up to an accuracy of 99% using bootstrapping, creeping up slightly under 10-fold cross-validation but at cost of higher variance. Finally, we saw that *introducing the combination of user\_name and num\_window noticeably increased the accuracy up to 99.7%.* This confirmed our earlier analysis that a relationship seemed to exist. 
 
+TODO: Boxplots are drawn where the whiskers correspond to the standard deviation of the accuracy across different cross-validation tests within each model. 
+
+The model we chose to use was Random Forest, boostrap, with user\_name and num\_window features included. These parameters gave us the best combination of accuracy and low variance on the cross-validated training dataset. Next, using this model, we predict the outcome classes of the testing dataset which we separated from the training dataset previously.
+
+```{r}
+pred <- predict(mod9, testing[,c(2,7,sensor_cols)])
+table(testing[,"classe"], pred) -> tab
+tab
+```
+
+The table above counts the number of actual classes vs. the predicted classes. The number of correctly predicted classes is given in the diagonals. We find that only a few testing cases were mispredicted.
+
+```{r}
+sum(diag(tab)) / nrow(testing) -> accuracy
+```
+
+**The accuracy on the testing dataset is `r accuracy * 100`%. This is the out-of-sample error we expect on unseen data. It is  quite close to the cross-validated accuracy we saw on the training set of `r as.numeric(res[9,1])*100`%**
+
+#Submission
+The following results are submitted for the graded testing set of 20 observations.
+```{r,echo=FALSE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+```
+```{r}
+ans <- predict(mod9, df_submit[,-bad_cols][,c(2,7,sensor_cols)])
+ans
+pml_write_files(ans)
+```

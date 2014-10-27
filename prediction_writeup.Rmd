@@ -2,7 +2,7 @@
 title: "Weight Lifting Exercise Prediction"
 author: "Kirby Zhang"
 date: "Monday, October 20, 2014"
-output: pdf_document
+output: html_document
 ---
 #Abstract
 [Weight lifting data](http://groupware.les.inf.puc-rio.br/har) collected by Ugulino, Velloso, and Fuks is used to form a prediction model. The model classifies one of five barbell lifting methods based on accelerometer and gyro data recorded on the user. Using manual feature selection and cross validation within and between different modeling methods, a high degree of prediction accuracy is achieved.
@@ -57,7 +57,7 @@ Next we are interested in looking at the timestamp fields as well as the `num_wi
 ```{r,fig.height=3}
 qplot(df$time, df$num_window, color=df$classe, 
       main="time appears to be an experiment artifact")
-qplot(df$num_window, fill=df$classe, main="num_window appears distributed across classes")
+#qplot(df$num_window, fill=df$classe, main="num_window appears distributed across classes")
 qplot(df$num_window, fill=df$user_name, main="num_window appears to be an artifact\n associated with individual users")
 qplot(num_window, classe, color=user_name, data=df, main="num_window appears related to the combination\nof user_name and activity classe")
 ```
@@ -238,6 +238,7 @@ with(x, filter(results, mtry==bestTune[1,1])[c("Accuracy","AccuracySD")])
 library(xtable)
 tab <- xtable(cbind(models[,-ncol(models)], res), digits=4)
 print(tab, type="html", html.table.attributes="border=0 cellpadding=3")
+#tab
 ```
 #Results
 
@@ -245,7 +246,37 @@ The previous table shows our progression toward ever better models. First we sta
 
 Our best results came from using Random Forest algorithms, shooting up to an accuracy of 99% using bootstrapping, creeping up slightly under 10-fold cross-validation but at cost of higher variance. Finally, we saw that *introducing the combination of user\_name and num\_window noticeably increased the accuracy up to 99.7%.* This confirmed our earlier analysis that a relationship seemed to exist. 
 
-TODO: Boxplots are drawn where the whiskers correspond to the standard deviation of the accuracy across different cross-validation tests within each model. 
+Boxplots are drawn where the whiskers correspond to 2 standard deviations of the accuracy across different cross-validation tests within each model. 
+```{r,fig.height=6}
+acc <- unlist(res)
+dim(acc) <- dim(res)
+bpdat <- matrix(c(acc[,1]-2*acc[,2], acc[,1], acc[,1]+2*acc[,2]), 
+       3, nrow(acc), byrow=TRUE)
+bpdat[,5] <- NA # the value for model no. 5 was not drawn for being too low
+cols <- rainbow(10)
+boxplot(
+  bpdat,
+  at=seq(ncol(bpdat),1,-1),
+  col=cols,
+  horizontal=TRUE,
+  xlab="Accuracy",
+  ylab="Model No.",
+  main="Accuracy of different models\n(whiskers extend to 2 std dev)")
+
+legend("bottomleft", c(
+  "1.gbm,bs",
+  "2.gbm,10k",
+  "3.gbm,10k,un",
+  "4.gbm,10k,C&S",
+  "5.gbm,10k,PCA(off-chart)",
+  "6.rf,bs",
+  "7.rf,10k",
+  "8.rf,bs,un",
+  "9.rf,bs,un,nw",
+  "10.rf,10k,un,nw"),
+  fill=cols
+)
+```
 
 The model we chose to use was Random Forest, boostrap, with user\_name and num\_window features included. These parameters gave us the best combination of accuracy and low variance on the cross-validated training dataset. Next, using this model, we predict the outcome classes of the testing dataset which we separated from the training dataset previously.
 

@@ -198,9 +198,32 @@ table(testing[,"classe"], pred2)
 sum(diag(pred2))
 df_submit[,-bad_cols][,c(2,7,sensor_cols)]
 
-boxplot(list(
-  c(1,2,3),
-  c(2,2.5,3)
-  ),
-  names=c("random forrest", "gbm"),
-  horizontal=TRUE)
+#apply(res, 1, function(x) c(x[1],x[2]))
+acc <- unlist(res)
+dim(acc) <- dim(res)
+bpdat <- matrix(c(acc[,1]-2*acc[,2], acc[,1], acc[,1]+2*acc[,2]), 
+       3, nrow(acc), byrow=TRUE)
+bpdat[,5] <- NA
+cols <- rainbow(10)
+boxplot(
+  bpdat,
+  at=seq(ncol(bpdat),1,-1),
+  col=cols,
+  horizontal=TRUE,
+  ylab="Accuracy",
+  xlab="Model No.",
+  main="Accuracy of different models\n(whiskers extend to 2 std dev)")
+
+legend("bottomleft", c(
+  "1.gbm,bs",
+  "2.gbm,10k",
+  "3.gbm,10k,un",
+  "4.gbm,10k,C&S",
+  "5.gbm,10k,PCA(off-chart)",
+  "6.rf,bs",
+  "7.rf,10k",
+  "8.rf,bs,un",
+  "9.rf,bs,un,nw",
+  "10.rf,10k,un,nw"),
+  fill=cols
+)
